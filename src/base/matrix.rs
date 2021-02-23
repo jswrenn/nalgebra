@@ -894,7 +894,23 @@ impl<N: Scalar, R: Dim, C: Dim, S: Storage<N, R, C>> Matrix<N, R, C, S> {
     /// }
     /// ```
     #[inline]
-    pub fn row_iter(&self) -> RowIter<N, R, C, S> {
+    pub fn row_iter(&self) -> RowIter<&Self> {
+        RowIter::new(&self)
+    }
+
+    /// Iterate through the owned rows of this matrix.
+    ///
+    /// # Example
+    /// ```
+    /// # use nalgebra::Matrix2x3;
+    /// let mut a = Matrix2x3::new(1, 2, 3,
+    ///                            4, 5, 6);
+    /// for (i, row) in a.into_row_iter().enumerate() {
+    ///     assert_eq!(row, a.row(i))
+    /// }
+    /// ```
+    #[inline]
+    pub fn into_row_iter(self) -> RowIter<Self> {
         RowIter::new(self)
     }
 

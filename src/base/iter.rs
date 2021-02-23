@@ -3,9 +3,10 @@
 use std::marker::PhantomData;
 use std::mem;
 
+use crate::base::allocator::Allocator;
 use crate::base::dimension::{Dim, U1};
-use crate::base::storage::{Storage, StorageMut};
-use crate::base::{Matrix, MatrixSlice, MatrixSliceMut, Scalar};
+use crate::base::storage::{Owned, Storage, StorageMut};
+use crate::base::{DefaultAllocator, Matrix, MatrixSlice, MatrixSliceMut, RowVector, Scalar};
 
 macro_rules! iterator {
     (struct $Name:ident for $Storage:ident.$ptr: ident -> $Ptr:ty, $Ref:ty, $SRef: ty) => {
@@ -132,18 +133,18 @@ iterator!(struct MatrixIterMut for StorageMut.ptr_mut -> *mut N, &'a mut N, &'a 
  */
 #[derive(Clone)]
 /// An iterator through the rows of a matrix.
-pub struct RowIter<'a, N: Scalar, R: Dim, C: Dim, S: Storage<N, R, C>> {
-    mat: &'a Matrix<N, R, C, S>,
-    curr: usize,
+pub struct RowIter<M> {
+  mat: M,
+  curr: usize,
 }
 
-impl<'a, N: Scalar, R: Dim, C: Dim, S: 'a + Storage<N, R, C>> RowIter<'a, N, R, C, S> {
-    pub(crate) fn new(mat: &'a Matrix<N, R, C, S>) -> Self {
+impl<M> RowIter<M> {
+    pub(crate) fn new(mat: M) -> Self {
         RowIter { mat, curr: 0 }
     }
 }
 
-impl<'a, N: Scalar, R: Dim, C: Dim, S: 'a + Storage<N, R, C>> Iterator for RowIter<'a, N, R, C, S> {
+impl<'a, N: Scalar, R: Dim, C: Dim, S: 'a + Storage<N, R, C>> Iterator for RowIter<&'a Matrix<N, R, C, S>> {
     type Item = MatrixSlice<'a, N, U1, C, S::RStride, S::CStride>;
 
     #[inline]
@@ -172,7 +173,49 @@ impl<'a, N: Scalar, R: Dim, C: Dim, S: 'a + Storage<N, R, C>> Iterator for RowIt
 }
 
 impl<'a, N: Scalar, R: Dim, C: Dim, S: 'a + Storage<N, R, C>> ExactSizeIterator
-    for RowIter<'a, N, R, C, S>
+    for RowIter<&'a Matrix<N, R, C, S>>
+{
+    #[inline]
+    fn len(&self) -> usize {
+        self.mat.nrows() - self.curr
+    }
+}
+
+impl<N: Scalar, R: Dim, C: Dim, S: Storage<N, R, C>> Iterator for RowIter<Matrix<N, R, C, S>>
+where
+    DefaultAllocator: Allocator<N, U1, C>,
+{
+    type Item = RowVector<N, C, Owned<N, U1, C>>;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.curr < self.mat.nrows() {
+            let res = Matrix::from_data(self.mat.row(self.curr).data.into_owned());
+            self.curr += 1;
+            Some(res)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (
+            self.mat.nrows() - self.curr,
+            Some(self.mat.nrows() - self.curr),
+        )
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.mat.nrows() - self.curr
+    }
+}
+
+impl<N: Scalar, R: Dim, C: Dim, S: Storage<N, R, C>> ExactSizeIterator
+    for RowIter<Matrix<N, R, C, S>>
+where
+    Self: Iterator
 {
     #[inline]
     fn len(&self) -> usize {
